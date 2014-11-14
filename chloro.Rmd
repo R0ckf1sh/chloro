@@ -1,0 +1,20 @@
+---
+title: "chloro"
+output: html_document
+---
+This is for calibrating the CTD fluorometer.
+
+
+```{r}
+library(RODBC)
+channel <- odbcConnectAccess2007("C:/juv_cruise/database/at_sea.mdb",uid="", pwd="")
+cal.new.df <- sqlQuery(channel, "SELECT   'C'+CRUISE AS CRUISE_NO,
+                                          CTD_INDEX AS INDEX,
+                                          BOTTLE_DEPTH AS DEPTH,
+                                          CHLOROPHYLL_A AS CHLOR,
+                                          FLUOR_VOLT AS VOLTAGE
+                                 FROM     CTD_FLUOR")
+odbcClose(channel)
+rm(channel)
+```
+
