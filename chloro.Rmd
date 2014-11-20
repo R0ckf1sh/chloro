@@ -6,56 +6,17 @@ This is for calibrating the CTD fluorometer.
 
 
 ```{r}
-library(RODBC)
-#channel <- odbcConnectAccess2007("C:/juv_cruise/database/at_sea.mdb",uid="", pwd="")
-#cal.new.df <- sqlQuery(channel, "SELECT   'C'+CRUISE AS CRUISE_NO,
-#                                          CTD_INDEX AS INDEX,
-#                                          BOTTLE_DEPTH AS DEPTH,
-#                                          CHLOROPHYLL_A AS CHLOR,
-#                                          FLUOR_VOLT AS VOLTAGE
-#                                 FROM     CTD_FLUOR")
-#odbcClose(channel)
-#rm(channel)
 
 ###### HERE IS THE BEGINNING OF THE NEW CODE ###########
 # Chlorophyll Calibration Script (translated from Steve's SAS code)
 
 # get calibration data from previous cruises
 library(RODBC)
-# Requires setting up "JUV_ROCKFISH" ODBC connection
-# Start, Control Panel, Administrative Tools, Data Sources (ODBC), etc.
-#channel <- odbcConnect("JUV_ROCKFISH", uid="", pwd="")
-#cal.old.df <- sqlQuery(channel, "SELECT   'C'+CRUISE AS 'CRUISE_NO',
-#                                          CTD_INDEX AS 'INDEX',
-#                                          BOTTLE_DEPTH AS 'DEPTH',
-#                                          CHLOROPHYLL_A AS 'CHLOR',
-#                                          FLUOR_VOLT AS 'VOLTAGE'
-#                                 FROM     JUV_ROCKFISH.dbo.CTD_FLUOR")
-
-# get header data from previous cruises
-#header.old.df <- sqlQuery(channel, "SELECT 'C'+CRUISE AS CRUISE_NO,
-#                                           YEAR(CTD_DATE) AS 'YEAR',
-#                                           CTD_INDEX AS 'INDEX',
-#                                           CTD_NO AS 'CTD',
-#                                           DATEPART(hour, CTD_DATE) AS 'HOUR',
-#                                           DATEPART(minute, CTD_DATE) AS 'MIN'
-#                                    FROM   JUV_ROCKFISH.dbo.CTD_HEADER
-#                                    WHERE  (CTD_NO IS NOT NULL)")
-
-# close connection to SQL Server
-#odbcClose(channel)
-#rm(channel)
-
-# add "PERIOD" (day/night) to header data
-#int.hr.old <- with(header.old.df, round(HOUR+(MIN/60),1))
-#period.old <- ifelse(int.hr.old>6 & int.hr.old<21, "D", "N") 
-#header.old.df <- cbind.data.frame(header.old.df, PERIOD = period.old)
-#rm(int.hr.old, period.old)
 
 # get data through 2012 from MS Access (juv_cruise backup Access database)
 # DRIVE LETTER AND/OR PATH MAY VARY
 #*** NOTE ***#: HAD TO ADD "dbo_" to table names to make Access query work
-channel <- odbcConnectAccess2007("J:/MWT/juv_cruise_backup24OCT13.mdb",uid="", pwd="")
+channel <- odbcConnectAccess2007("C:/cruise/MWT/juv_cruise_backup24OCT13.mdb",uid="", pwd="")
 cal.old.df <- sqlQuery(channel, "SELECT   'C'+CRUISE AS CRUISE_NO,
                                           CTD_INDEX AS INDEX,
                                           BOTTLE_DEPTH AS DEPTH,
@@ -86,7 +47,7 @@ rm(channel)
 
 # get data through from MS Access (juv_cruise backup Access database)
 # DRIVE LETTER AND/OR PATH MAY VARY
-channel <- odbcConnectAccess2007("J:/MWT/cruise_1305/database/at_sea.mdb",uid="", pwd="")
+channel <- odbcConnectAccess2007("C:/cruise/MWT/cruise_1305/database/at_sea.mdb",uid="", pwd="")
 cal.new.df <- sqlQuery(channel, "SELECT   'C'+CRUISE AS CRUISE_NO,
                                           CTD_INDEX AS INDEX,
                                           BOTTLE_DEPTH AS DEPTH,
