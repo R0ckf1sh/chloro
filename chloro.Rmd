@@ -7,14 +7,167 @@ This is for calibrating the CTD fluorometer.
 
 ```{r}
 library(RODBC)
-channel <- odbcConnectAccess2007("C:/juv_cruise/database/at_sea.mdb",uid="", pwd="")
+#channel <- odbcConnectAccess2007("C:/juv_cruise/database/at_sea.mdb",uid="", pwd="")
+#cal.new.df <- sqlQuery(channel, "SELECT   'C'+CRUISE AS CRUISE_NO,
+#                                          CTD_INDEX AS INDEX,
+#                                          BOTTLE_DEPTH AS DEPTH,
+#                                          CHLOROPHYLL_A AS CHLOR,
+#                                          FLUOR_VOLT AS VOLTAGE
+#                                 FROM     CTD_FLUOR")
+#odbcClose(channel)
+#rm(channel)
+
+###### HERE IS THE BEGINNING OF THE NEW CODE ###########
+# Chlorophyll Calibration Script (translated from Steve's SAS code)
+
+# get calibration data from previous cruises
+library(RODBC)
+# Requires setting up "JUV_ROCKFISH" ODBC connection
+# Start, Control Panel, Administrative Tools, Data Sources (ODBC), etc.
+#channel <- odbcConnect("JUV_ROCKFISH", uid="", pwd="")
+#cal.old.df <- sqlQuery(channel, "SELECT   'C'+CRUISE AS 'CRUISE_NO',
+#                                          CTD_INDEX AS 'INDEX',
+#                                          BOTTLE_DEPTH AS 'DEPTH',
+#                                          CHLOROPHYLL_A AS 'CHLOR',
+#                                          FLUOR_VOLT AS 'VOLTAGE'
+#                                 FROM     JUV_ROCKFISH.dbo.CTD_FLUOR")
+
+# get header data from previous cruises
+#header.old.df <- sqlQuery(channel, "SELECT 'C'+CRUISE AS CRUISE_NO,
+#                                           YEAR(CTD_DATE) AS 'YEAR',
+#                                           CTD_INDEX AS 'INDEX',
+#                                           CTD_NO AS 'CTD',
+#                                           DATEPART(hour, CTD_DATE) AS 'HOUR',
+#                                           DATEPART(minute, CTD_DATE) AS 'MIN'
+#                                    FROM   JUV_ROCKFISH.dbo.CTD_HEADER
+#                                    WHERE  (CTD_NO IS NOT NULL)")
+
+# close connection to SQL Server
+#odbcClose(channel)
+#rm(channel)
+
+# add "PERIOD" (day/night) to header data
+#int.hr.old <- with(header.old.df, round(HOUR+(MIN/60),1))
+#period.old <- ifelse(int.hr.old>6 & int.hr.old<21, "D", "N") 
+#header.old.df <- cbind.data.frame(header.old.df, PERIOD = period.old)
+#rm(int.hr.old, period.old)
+
+# get data through 2012 from MS Access (juv_cruise backup Access database)
+# DRIVE LETTER AND/OR PATH MAY VARY
+#*** NOTE ***#: HAD TO ADD "dbo_" to table names to make Access query work
+channel <- odbcConnectAccess2007("J:/MWT/juv_cruise_backup24OCT13.mdb",uid="", pwd="")
+cal.old.df <- sqlQuery(channel, "SELECT   'C'+CRUISE AS CRUISE_NO,
+                                          CTD_INDEX AS INDEX,
+                                          BOTTLE_DEPTH AS DEPTH,
+                                          CHLOROPHYLL_A AS CHLOR,
+                                          FLUOR_VOLT AS VOLTAGE
+                                 FROM     dbo_CTD_FLUOR")
+
+# get header data from at_sea database (NOTE LAME SYNTAX REQUIRED BY MS ACCESS)
+header.old.df <- sqlQuery(channel, "SELECT 'C'+CRUISE AS CRUISE_NO,
+                                           YEAR(CTD_DATE) AS YEAR,
+                                           CTD_INDEX AS INDEX,
+                                           CTD_NO AS CTD,
+                                           DATEPART('h', CTD_DATE) AS HOUR,
+                                           DATEPART('n', CTD_DATE) AS MIN
+                                    FROM   dbo_CTD_HEADER
+                                    WHERE  (CTD_NO IS NOT NULL)")
+
+# add "PERIOD" (day/night) to header data
+int.hr.old <- with(header.old.df, round(HOUR+(MIN/60),1))
+period.old <- ifelse(int.hr.old>6 & int.hr.old<21, "D", "N") 
+header.old.df <- cbind.data.frame(header.old.df,
+                                  PERIOD = period.old)
+rm(int.hr.old, period.old)
+
+# close connection to at_sea database
+odbcClose(channel)
+rm(channel)
+
+# get data through from MS Access (juv_cruise backup Access database)
+# DRIVE LETTER AND/OR PATH MAY VARY
+channel <- odbcConnectAccess2007("J:/MWT/cruise_1305/database/at_sea.mdb",uid="", pwd="")
 cal.new.df <- sqlQuery(channel, "SELECT   'C'+CRUISE AS CRUISE_NO,
                                           CTD_INDEX AS INDEX,
                                           BOTTLE_DEPTH AS DEPTH,
                                           CHLOROPHYLL_A AS CHLOR,
                                           FLUOR_VOLT AS VOLTAGE
                                  FROM     CTD_FLUOR")
+
+# get header data from at_sea database (NOTE LAME SYNTAX REQUIRED BY MS ACCESS)
+header.new.df <- sqlQuery(channel, "SELECT 'C'+CRUISE AS CRUISE_NO,
+                                           YEAR(CTD_DATE) AS YEAR,
+                                           CTD_INDEX AS INDEX,
+                                           CTD_NO AS CTD,
+                                           DATEPART('h', CTD_DATE) AS HOUR,
+                                           DATEPART('n', CTD_DATE) AS MIN
+                                    FROM   CTD_HEADER
+                                    WHERE  (CTD_NO IS NOT NULL)")
+
+# add "PERIOD" (day/night) to header data
+int.hr.new <- with(header.new.df, round(HOUR+(MIN/60),1))
+period.new <- ifelse(int.hr.new>6 & int.hr.new<21, "D", "N") 
+header.new.df <- cbind.data.frame(header.new.df,
+                                  PERIOD = period.new)
+rm(int.hr.new, period.new)
+
+# close connection to at_sea database
 odbcClose(channel)
 rm(channel)
+
+# combine old and new calibration data into single data frame
+cal.df <- rbind.data.frame(cal.old.df, cal.new.df)
+
+# combine old and new header data into single data frame
+header.df <- rbind.data.frame(header.old.df, header.new.df)
+
+# merge cal.df and header.df on shared columns (CRUISE_NO and INDEX)
+# and add column for year/CTD combination ('ID') and log(depth), logz
+calibrate.df <- merge(x=cal.df, y=header.df)
+calibrate.df <- cbind.data.frame(calibrate.df,
+                                 id=paste(calibrate.df[,"YEAR"],"ctd",calibrate.df[,"CTD"], sep=""),
+                                 logz=log(calibrate.df$DEPTH))
+
+# convert "id" to a factor
+calibrate.df[["id"]] <- as.factor(calibrate.df[["id"]])
+
+# REMOVE DATA FROM 2007, CTD NUMBER 5
+# these data were collected using Brian Well's methods b/c the carousel was lost that year
+calibrate.df <- subset(calibrate.df, id!="2007ctd5")
+
+# fit GLMs with SAS contrasts to compare with Steve's output
+options(contrasts = c("contr.SAS", "contr.poly"))
+
+# fit LM to identify outliers and generate "clean" data
+library(MASS)
+temp.lm <- lm(CHLOR~id+VOLTAGE+logz, data=calibrate.df)
+keepers <- abs(stdres(temp.lm))<=2
+clean.df <- calibrate.df[keepers,]
+
+# final LM fit
+clean.lm <- lm(CHLOR~id+VOLTAGE+logz, data=clean.df)
+summary(clean.lm)
+anova(clean.lm, test="F")
+
+# reset contrasts to R default
+# options(contrasts = c("contr.treatment", "contr.poly"))
+
+# Print the equation for 2012 (only one ctd this year)
+paste("CHLOR = ",round(coef(clean.lm)["(Intercept)"],4)," + ",
+      round(coef(clean.lm)["VOLTAGE"],4),"*VOLTAGE + ",
+      round(coef(clean.lm)["logz"],4),"*LOGZ", sep="")
+
+# plot chlor as a function of voltage, by year/ctd
+library(lattice)
+xyplot(CHLOR ~ VOLTAGE | id, data=clean.df, type = c("p","r"), col=1)
+
+# plot chlor as a function of logz, by year/ctd
+windows()
+xyplot(CHLOR ~ logz | id, data=clean.df, type = c("p","r"), col=1)
+
+# FOR 2013:
+# INVESTIGATE LOG-TRANSFORMATION OF CHLOR AND VOLTAGE
+# plot(lm(log(CHLOR)~id+log(VOLTAGE)+logz, data=subset(clean.df, CHLOR>0)))
+
 ```
 
