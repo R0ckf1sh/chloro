@@ -2,9 +2,9 @@
 title: "chloro"
 output: html_document
 ---
-This is for calibrating the CTD fluorometer.
+This R code is for calibrating the CTD fluorometer.
 
-
+1. Read in the data from past years using the RODBC package
 ```{r}
 
 ###### HERE IS THE BEGINNING OF THE NEW CODE ###########
@@ -33,7 +33,12 @@ header.old.df <- sqlQuery(channel, "SELECT 'C'+CRUISE AS CRUISE_NO,
                                            DATEPART('n', CTD_DATE) AS MIN
                                     FROM   dbo_CTD_HEADER
                                     WHERE  (CTD_NO IS NOT NULL)")
+```
 
+1. Create a simple "day/night"" (D/N) variable defining "day" as hours
+between 6am and 9pm.
+
+```{r}
 # add "PERIOD" (day/night) to header data
 int.hr.old <- with(header.old.df, round(HOUR+(MIN/60),1))
 period.old <- ifelse(int.hr.old>6 & int.hr.old<21, "D", "N") 
@@ -45,6 +50,11 @@ rm(int.hr.old, period.old)
 odbcClose(channel)
 rm(channel)
 
+```
+
+1. Read in the data from the most recent year (separate database)
+
+```{r}
 # get data through from MS Access (juv_cruise backup Access database)
 # DRIVE LETTER AND/OR PATH MAY VARY
 channel <- odbcConnectAccess2007("C:/cruise/MWT/cruise_1305/database/at_sea.mdb",uid="", pwd="")
@@ -65,6 +75,11 @@ header.new.df <- sqlQuery(channel, "SELECT 'C'+CRUISE AS CRUISE_NO,
                                     FROM   CTD_HEADER
                                     WHERE  (CTD_NO IS NOT NULL)")
 
+```
+
+1. Create "day/night" variable for recent data
+
+```{r}
 # add "PERIOD" (day/night) to header data
 int.hr.new <- with(header.new.df, round(HOUR+(MIN/60),1))
 period.new <- ifelse(int.hr.new>6 & int.hr.new<21, "D", "N") 
@@ -76,6 +91,12 @@ rm(int.hr.new, period.new)
 odbcClose(channel)
 rm(channel)
 
+
+```
+
+1. Merge the old and new data sets into a single dataframe
+
+```{r}
 # combine old and new calibration data into single data frame
 cal.df <- rbind.data.frame(cal.old.df, cal.new.df)
 
@@ -92,32 +113,57 @@ calibrate.df <- cbind.data.frame(calibrate.df,
 # convert "id" to a factor
 calibrate.df[["id"]] <- as.factor(calibrate.df[["id"]])
 
-# REMOVE DATA FROM 2007, CTD NUMBER 5
-# these data were collected using Brian Well's methods b/c the carousel was lost that year
+```
+
+1. Exclude data from 2007, CTD #5 (collected using Brian Well's methods because carousel was lost that year)
+
+```{r}
 calibrate.df <- subset(calibrate.df, id!="2007ctd5")
 
+```
+
+1. Change the default "baseline" factor level to match SAS output
+
+```{r}
 # fit GLMs with SAS contrasts to compare with Steve's output
 options(contrasts = c("contr.SAS", "contr.poly"))
 
+```
+
+1. Replicate Steve's approach of fitting a linear model and removing data with residuals greater than 2 standard deviations from the mean
+
+```{r}
 # fit LM to identify outliers and generate "clean" data
 library(MASS)
 temp.lm <- lm(CHLOR~id+VOLTAGE+logz, data=calibrate.df)
 keepers <- abs(stdres(temp.lm))<=2
 clean.df <- calibrate.df[keepers,]
 
+```
+
+1. Fit linear model to 'clean' data
+
+```{r}
 # final LM fit
 clean.lm <- lm(CHLOR~id+VOLTAGE+logz, data=clean.df)
 summary(clean.lm)
 anova(clean.lm, test="F")
 
-# reset contrasts to R default
-# options(contrasts = c("contr.treatment", "contr.poly"))
+```
 
+1. Print the equation that predicts chlorophyl for each CTD/year from voltage and depth
+
+```{r}
 # Print the equation for 2012 (only one ctd this year)
 paste("CHLOR = ",round(coef(clean.lm)["(Intercept)"],4)," + ",
       round(coef(clean.lm)["VOLTAGE"],4),"*VOLTAGE + ",
       round(coef(clean.lm)["logz"],4),"*LOGZ", sep="")
 
+```
+
+1. These plots suggest that we might explore alternative models in the future
+
+```{r}
 # plot chlor as a function of voltage, by year/ctd
 library(lattice)
 xyplot(CHLOR ~ VOLTAGE | id, data=clean.df, type = c("p","r"), col=1)
@@ -126,7 +172,7 @@ xyplot(CHLOR ~ VOLTAGE | id, data=clean.df, type = c("p","r"), col=1)
 windows()
 xyplot(CHLOR ~ logz | id, data=clean.df, type = c("p","r"), col=1)
 
-# FOR 2013:
+# FOR FUTURE:
 # INVESTIGATE LOG-TRANSFORMATION OF CHLOR AND VOLTAGE
 # plot(lm(log(CHLOR)~id+log(VOLTAGE)+logz, data=subset(clean.df, CHLOR>0)))
 
